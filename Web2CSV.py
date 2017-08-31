@@ -220,7 +220,9 @@ class HSBCAccount:
         # The default identifier is the HSBC account or credit card number.
         # These are stored in a <span> tag with id = "LongSelection1Output".
         t = ''
-        t = self.ie.document.getElementByID('LongSelection1Output').innerText
+        for e in self.ie.document.all:
+            if e.id == 'LongSelection1Output':
+                t = e.innerText
         if len(t) > 0:
             # Test if string is an account number or a credit card number.
             m = re.search('\d{3}-\d{6}-\d{3}|(\d{4}-){3}\d{4}', t)
@@ -265,23 +267,10 @@ class HSBCAccount:
             if len(cols) > 0: # this will make sure we skip the table header <th> tags
                 c = [] # stores the values from the columns in the current row
                 for col in cols:
-                    if (col.string) < 1:
-                        # For current accounts the second column contains the
-                        # transaction details. These are multiple line separated
-                        # by <br/> tags. We strip them out and concatenate to one line.
-                        if self.type == 'HSBC Current Account':
-                            t = col.renderContents().replace('<br />', ' ').strip()
-                            t = t.replace('&amp;','').strip()
-                        # For credit card accounts the last column is either empty
-                        # or contains 'Cr' enclosed in <b> tag for CC balance payments.
-                        if self.type == 'HSBC Premier Card':
-                            t = col.text.strip()
-                    else:
-                        t = col.string.replace('&nbsp;', '').strip()
-                        t = t.replace('&amp;', '').strip()
+                    t = ' '.join(col.text.split())
                     c.append(t)
 
-                # Check if we are the transaction stretches over two lines
+                # Check if we are the transaction stretches over two rows
                 if len(c) == 6: # double check we have 6 columns (each transaction line has 6 columns)
                     if c[0] + c[1] + c[2] + c[4] + c[5] == '':
                         # The second line only contains foreign currency information in column 4. We
@@ -293,7 +282,7 @@ class HSBCAccount:
                         txn.append(c)
 
         # Open the CSV file
-        f = open(self.fileName, 'wb')
+        f = open(self.fileName, 'w')
         CSVFile = csv.writer(f, delimiter=';')
         # Write CSV header
         CSVFile.writerow(['Wertstellung', 'Buchungsdatum', 'Verwendungszweck', 'Betrag'])
