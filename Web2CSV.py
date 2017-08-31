@@ -23,6 +23,7 @@ import re
 from datetime import datetime
 from bs4 import BeautifulSoup
 import csv
+import glob
 
 class BarclaysAccount:
     """Class for interpreting Barclays account statements."""
@@ -191,6 +192,7 @@ class HSBCAccount:
         self.type = 'HSBC'
         self.ie = ie
         self.fileName = ''
+        self.transactions = []
 
     def recognise(self):
         """Method to detect whether the current website contains a HSBC \
@@ -243,6 +245,18 @@ class HSBCAccount:
             print('Cannot find the <span> tag with the account number or credit card number for the HSBC account.')
 
         return i
+    
+    def read_previous_transactions(self, previous_CSV_files):
+        """ Read all previous transactions from CSV files. Filter out all duplicate transactions. This will 
+            merge multiple website exports with overlapping transactions into one CSV file for import into
+            WISO Mein Geld."""
+        CSV_files = glob.glob(str(previous_CSV_files))
+        for file in CSV_files:
+            with open(file, 'r') as file:
+                lines = file.read().splitlines()
+            for line in lines:
+                if not(line in self.transactions):
+                    self.transactions.append(line)
 
     def writeCSV(self):
         """ Method that reads the <table> with the account transactions and \
@@ -254,7 +268,7 @@ class HSBCAccount:
         rows = table.findAll('tr', {'class':re.compile('hsbcTableRow03 hsbcTableRow05|hsbcTableRow04 hsbcTableRow05')})
 
         # Apparently Beautiful Soup objects take up quite a bit of memory. It's
-        # propably a good idea to delete the variable now that we no longer
+        # probably a good idea to delete the variable now that we no longer
         # need it.
         del soup, table
 
@@ -267,7 +281,7 @@ class HSBCAccount:
             if len(cols) > 0: # this will make sure we skip the table header <th> tags
                 c = [] # stores the values from the columns in the current row
                 for col in cols:
-                    t = ' '.join(col.text.split())
+                    t = ' '.join(col.text.strip().split())
                     c.append(t)
 
                 # Check if we are the transaction stretches over two rows
@@ -282,7 +296,8 @@ class HSBCAccount:
                         txn.append(c)
 
         # Open the CSV file
-        f = open(self.fileName, 'w')
+        f = open(self.fileName, 'w', newline='')
+        self.write_previous_transactions(f)
         CSVFile = csv.writer(f, delimiter=';')
         # Write CSV header
         CSVFile.writerow(['Wertstellung', 'Buchungsdatum', 'Verwendungszweck', 'Betrag'])
@@ -334,6 +349,9 @@ class HSBCAccount:
         # Close the CSV file
         f.close()
 
+    def write_previous_transactions(self, file):
+        
+
     def __getBetrag(self, x, y):
         if x == '': b = y
         # Need to add the "-" sign to the debit values.
@@ -380,6 +398,8 @@ if __name__ == '__main__':
                     CSVFileName = interpreter.type + ' ' + identifier + ' ' + \
                                   datetime.now().strftime('%Y-%m-%d %H-%M-%S') + \
                                   '.csv'
+                    previous_CSV_files = interpreter.type + ' ' + identifier + '*' + '.csv'
+                    interpreter.read_previous_transactions(previous_CSV_files)
                     interpreter.fileName = CSVFileName
                     interpreter.writeCSV()
                     print
