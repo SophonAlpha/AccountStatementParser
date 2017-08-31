@@ -247,10 +247,12 @@ class HSBCAccount:
         return i
     
     def read_previous_transactions(self, previous_CSV_files):
-        """ Read all previous transactions from CSV files. Filter out all duplicate transactions. This will 
-            merge multiple website exports with overlapping transactions into one CSV file for import into
+        """ Read all previous transactions from CSV files. Filter out all 
+            duplicate transactions. This will merge multiple website exports 
+            with overlapping transactions into one CSV file for import into 
             WISO Mein Geld."""
         CSV_files = glob.glob(str(previous_CSV_files))
+        self.transactions = []
         for file in CSV_files:
             with open(file, 'r') as file:
                 lines = file.read().splitlines()
@@ -259,7 +261,7 @@ class HSBCAccount:
                     self.transactions.append(line)
 
     def writeCSV(self):
-        """ Method that reads the <table> with the account transactions and \
+        """ Method that reads the <table> with the account transactions and
             writes them into a file in CSV format."""
 
         soup = BeautifulSoup(self.ie.document.body.innerHTML)
@@ -295,13 +297,7 @@ class HSBCAccount:
                     else:
                         txn.append(c)
 
-        # Open the CSV file
-        f = open(self.fileName, 'w', newline='')
-        self.write_previous_transactions(f)
-        CSVFile = csv.writer(f, delimiter=';')
-        # Write CSV header
-        CSVFile.writerow(['Wertstellung', 'Buchungsdatum', 'Verwendungszweck', 'Betrag'])
-        # Write transaction details.
+        # add new transactions
         txnNo = 1
         for p in txn:
 
@@ -333,8 +329,10 @@ class HSBCAccount:
             print('Balance             : ' + txnBalance)
             print('------------------------------------------------')
 
-            # Write transaction to CSV file
-            CSVFile.writerow([txnWertstellung, txnBuchungsdatum, txnVerwendungszweck, txnBetrag])
+            # add transaction to transaction list
+            line = txnWertstellung + ';' + txnBuchungsdatum + ';' + txnVerwendungszweck + ';' + txnBetrag
+            if not(line in self.transactions):
+                self.transactions.append(line)
 
             txnWertstellung = ''
             txnBuchungsdatum = ''
@@ -346,11 +344,31 @@ class HSBCAccount:
 
             txnNo = txnNo + 1
 
-        # Close the CSV file
-        f.close()
+        self.add_CSV_header()
+        self.sort_transactions()
+        self.write_transactions()
 
-    def write_previous_transactions(self, file):
-        
+    def sort_transactions(self):
+        self.transactions[1:] = sorted(self.transactions[1:], key=self.sort_by_date)
+
+    def sort_by_date(self, line):
+        cols = line.split(';')
+        date_parts = cols[0].split('/')
+        day = date_parts[0]
+        month = date_parts[1]
+        year = date_parts[2]
+        return year, month, day
+
+    def add_CSV_header(self):
+        CSVheader = 'Wertstellung;Buchungsdatum;Verwendungszweck;Betrag'
+        if not(CSVheader in self.transactions):
+            # add header to first line of CSV file
+            self.transactions[:0] = [CSVheader] 
+
+    def write_transactions(self):
+        with open(self.fileName, 'w', newline='') as f:
+            for line in self.transactions:
+                f.write(line + '\n')
 
     def __getBetrag(self, x, y):
         if x == '': b = y
