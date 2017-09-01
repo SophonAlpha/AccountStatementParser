@@ -269,67 +269,19 @@ class HSBCAccount:
         # Extract the table that contains the transactions
         table = soup.find('table', {'class':'hsbcTableStyle07'})
         rows = table.findAll('tr', {'class':re.compile('hsbcTableRow03 hsbcTableRow05|hsbcTableRow04 hsbcTableRow05')})
-
         # Apparently Beautiful Soup objects take up quite a bit of memory. It's
         # probably a good idea to delete the variable now that we no longer
         # need it.
         del soup, table
-
-        # read all html lines and build a list that contains all transactions
+        # extract and process new transactions
         txn = self.extract_transactions_from_html(rows)
-
-        # add new transactions
-        txnNo = 1
-        for p in txn:
-
-            # current accounts
-            if self.type == 'HSBC Current Account':
-                # Reformat the date representation from '<name of month> <day>, <year>'
-                # to '<day>/<month>/<year>'
-                txnWertstellung = datetime.strptime(p[0], '%B %d, %Y').strftime('%d/%m/%Y')
-                txnBuchungsdatum = txnWertstellung
-                txnVerwendungszweck = p[1]
-                txnBetrag = self.__commaPoint(self.__getBetrag(p[2], p[3]))
-                txnBalance = self.__commaPoint(p[4])
-
-            # credit cards
-            if self.type == 'HSBC Premier Card':
-                txnBuchungsdatum = datetime.strptime(p[0], '%B %d, %Y').strftime('%d/%m/%Y')
-                txnWertstellung = datetime.strptime(p[1], '%B %d, %Y').strftime('%d/%m/%Y')
-                txnVerwendungszweck = p[2]
-                txnBetrag = self.__commaPoint(self.__getCCBetrag(p[4], p[5]))
-                txnBalance = '' # CC statements don't show a balance
-
-            # Print transaction details on console
-            print('Transaction No. ' + str(txnNo))
-            print
-            print('Wertstellung        : ' + txnWertstellung)
-            print('Buchungsdatum       : ' + txnBuchungsdatum)
-            print('Verwendungszweck    : ' + txnVerwendungszweck)
-            print('Betrag              : ' + txnBetrag)
-            print('Balance             : ' + txnBalance)
-            print('------------------------------------------------')
-
-            # add transaction to transaction list
-            line = txnWertstellung + ';' + txnBuchungsdatum + ';' + txnVerwendungszweck + ';' + txnBetrag
-            if not(line in self.transactions):
-                self.transactions.append(line)
-
-            txnWertstellung = ''
-            txnBuchungsdatum = ''
-            txnBuchungsart = ''
-            txnSenderEmpfaenger = ''
-            txnVerwendungszweck = ''
-            txnBetrag = ''
-            txnBalance = ''
-
-            txnNo = txnNo + 1
-
+        self.add_new_transactions(txn)
         self.add_CSV_header()
         self.sort_transactions()
         self.write_transactions()
 
     def extract_transactions_from_html(self, rows):
+        """ Extract all transactions from website. """
         txn = []
         for row in rows:
             cols = row.findAll('td')
@@ -350,6 +302,51 @@ class HSBCAccount:
                         txn.append(c)
         return txn
 
+    def add_new_transactions(self, txn):
+        """ add the new transactions to the list that includes any previous 
+            transactions. """
+        txnNo = 1
+        for p in txn:
+            # current accounts
+            if self.type == 'HSBC Current Account':
+                # Reformat the date representation from '<name of month> <day>, <year>'
+                # to '<day>/<month>/<year>'
+                txnWertstellung = datetime.strptime(p[0], '%B %d, %Y').strftime('%d/%m/%Y')
+                txnBuchungsdatum = txnWertstellung
+                txnVerwendungszweck = p[1]
+                txnBetrag = self.__commaPoint(self.__getBetrag(p[2], p[3]))
+                txnBalance = self.__commaPoint(p[4])
+            # credit cards
+            if self.type == 'HSBC Premier Card':
+                txnBuchungsdatum = datetime.strptime(p[0], '%B %d, %Y').strftime('%d/%m/%Y')
+                txnWertstellung = datetime.strptime(p[1], '%B %d, %Y').strftime('%d/%m/%Y')
+                txnVerwendungszweck = p[2]
+                txnBetrag = self.__commaPoint(self.__getCCBetrag(p[4], p[5]))
+                txnBalance = '' # CC statements don't show a balance
+            # print transaction details on console
+            print('Transaction No. ' + str(txnNo))
+            print
+            print('Wertstellung        : ' + txnWertstellung)
+            print('Buchungsdatum       : ' + txnBuchungsdatum)
+            print('Verwendungszweck    : ' + txnVerwendungszweck)
+            print('Betrag              : ' + txnBetrag)
+            print('Balance             : ' + txnBalance)
+            print('------------------------------------------------')
+            # add transaction to transaction list
+            line = txnWertstellung + ';' + txnBuchungsdatum + ';' + txnVerwendungszweck + ';' + txnBetrag
+            if not(line in self.transactions):
+                self.transactions.append(line)
+            # clean up working variables
+            txnWertstellung = ''
+            txnBuchungsdatum = ''
+            txnBuchungsart = ''
+            txnSenderEmpfaenger = ''
+            txnVerwendungszweck = ''
+            txnBetrag = ''
+            txnBalance = ''
+            # transaction counter
+            txnNo = txnNo + 1
+
     def sort_transactions(self):
         """ Sort list of transactions by 'Wertstellung' date. """
         self.transactions[1:] = sorted(self.transactions[1:], key=self.sort_by_date)
@@ -364,12 +361,14 @@ class HSBCAccount:
         return year, month, day
 
     def add_CSV_header(self):
+        """ Add a header line to the list of transactions. """
         CSVheader = 'Wertstellung;Buchungsdatum;Verwendungszweck;Betrag'
         if not(CSVheader in self.transactions):
             # add header to first line of CSV file
             self.transactions[:0] = [CSVheader] 
 
     def write_transactions(self):
+        """ Write transactions to CSV file. """
         with open(self.fileName, 'w', newline='') as f:
             for line in self.transactions:
                 f.write(line + '\n')
