@@ -13,7 +13,7 @@
 #                       "Verwendungszweck"
 #   1.3 - 11.02.2012    Fix: remove '&amp;' from HSBC transaction details text
 #   1.4 - 25.12.2012    Fix: added detection of HSBC UAE eSaver Accounts
-#   2.0 - 28.08.2012    Fixes after HSBC webiste chnage, Refactored for multiple
+#   2.0 - 28.08.2012    Fixes after HSBC website change, Refactored for multiple
 #                       CSV file merge, code migrated to Python 3.6
 #-------------------------------------------------------------------------------
 #!/usr/bin/env python
@@ -24,7 +24,6 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 import csv
 import glob
-from nbformat.v4.tests.nbexamples import cells
 
 class BarclaysAccount:
     """Class for interpreting Barclays account statements."""
@@ -188,7 +187,6 @@ class BarclaysAccount:
 
 class HSBCAccount:
     """Class for interpreting HSBC account statements."""
-
     def __init__(self, ie):
         self.type = 'HSBC'
         self.ie = ie
@@ -198,7 +196,6 @@ class HSBCAccount:
     def recognise(self):
         """Method to detect whether the current website contains a HSBC \
            account table"""
-
         # Criterias for identifying the HSBC account statement website:
         # 1.) find string " HSBC UAE - Internet Banking - Account History " in the title
         # 2.) The account <table> in the html document has a class attribute
@@ -211,7 +208,6 @@ class HSBCAccount:
             r = True
         else:
             r = False
-
         return r
 
     def getIdentifier(self):
@@ -267,7 +263,13 @@ class HSBCAccount:
 
         soup = BeautifulSoup(self.ie.document.body.innerHTML)
         # Extract the table that contains the transactions
-        table = soup.find('table', {'class':'hsbcTableStyle07'})
+        tables = soup.findAll('table', {'class':'hsbcTableStyle07'})
+        for table in tables:
+            # There are several tables with 'class':'hsbcTableStyle07' in the 
+            # html structure. We use the string 'Transaction Date' to find the
+            # one that contains the transactions.
+            if table.text.find('Transaction Date') >= 0:
+                break
         rows = table.findAll('tr', {'class':re.compile('hsbcTableRow03 hsbcTableRow05|hsbcTableRow04 hsbcTableRow05')})
         # Apparently Beautiful Soup objects take up quite a bit of memory. It's
         # probably a good idea to delete the variable now that we no longer
@@ -281,7 +283,7 @@ class HSBCAccount:
         self.write_transactions()
 
     def extract_transactions_from_html(self, rows):
-        """ Extract all transactions from website. """
+        """ Extract all transactions from html code. """
         txn = []
         for row in rows:
             cols = row.findAll('td')
@@ -320,7 +322,7 @@ class HSBCAccount:
             if self.type == 'HSBC Premier Card':
                 txnBuchungsdatum = datetime.strptime(p[0], '%B %d, %Y').strftime('%d/%m/%Y')
                 txnWertstellung = datetime.strptime(p[1], '%B %d, %Y').strftime('%d/%m/%Y')
-                txnVerwendungszweck = p[2]
+                txnVerwendungszweck = p[2].strip()
                 txnBetrag = self.__commaPoint(self.__getCCBetrag(p[4], p[5]))
                 txnBalance = '' # CC statements don't show a balance
             # print transaction details on console
