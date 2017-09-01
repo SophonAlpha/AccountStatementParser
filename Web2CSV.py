@@ -24,6 +24,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 import csv
 import glob
+from nbformat.v4.tests.nbexamples import cells
 
 class BarclaysAccount:
     """Class for interpreting Barclays account statements."""
@@ -275,27 +276,7 @@ class HSBCAccount:
         del soup, table
 
         # read all html lines and build a list that contains all transactions
-        txn = [] # transaction list
-        for row in rows:
-
-            cols = row.findAll('td')
-
-            if len(cols) > 0: # this will make sure we skip the table header <th> tags
-                c = [] # stores the values from the columns in the current row
-                for col in cols:
-                    t = ' '.join(col.text.strip().split())
-                    c.append(t)
-
-                # Check if we are the transaction stretches over two rows
-                if len(c) == 6: # double check we have 6 columns (each transaction line has 6 columns)
-                    if c[0] + c[1] + c[2] + c[4] + c[5] == '':
-                        # The second line only contains foreign currency information in column 4. We
-                        # attach that information to the details text of column 3 of the previous line.
-                        p = txn.pop() # get the information from the previous line
-                        p[2] = p[2] + ' ' + c[3]
-                        txn.append(p) # save amended transaction details
-                    else:
-                        txn.append(c)
+        txn = self.extract_transactions_from_html(rows)
 
         # add new transactions
         txnNo = 1
@@ -348,12 +329,35 @@ class HSBCAccount:
         self.sort_transactions()
         self.write_transactions()
 
+    def extract_transactions_from_html(self, rows):
+        txn = []
+        for row in rows:
+            cols = row.findAll('td')
+            if len(cols) > 0: # this will make sure we skip the table header <th> tags
+                c = [] # stores the values from the columns in the current row
+                for col in cols:
+                    t = ' '.join(col.text.strip().split())
+                    c.append(t)
+                # Check if we are the transaction stretches over two rows
+                if len(c) == 6: # double check we have 6 columns (each transaction line has 6 columns)
+                    if c[0] + c[1] + c[2] + c[4] + c[5] == '':
+                        # The second line only contains foreign currency information in column 4. We
+                        # attach that information to the details text of column 3 of the previous line.
+                        p = txn.pop() # get the information from the previous line
+                        p[2] = p[2] + ' ' + c[3]
+                        txn.append(p) # save amended transaction details
+                    else:
+                        txn.append(c)
+        return txn
+
     def sort_transactions(self):
+        """ Sort list of transactions by 'Wertstellung' date. """
         self.transactions[1:] = sorted(self.transactions[1:], key=self.sort_by_date)
 
     def sort_by_date(self, line):
-        cols = line.split(';')
-        date_parts = cols[0].split('/')
+        """ Sorting function for sorted() function. """
+        cells = line.split(';')
+        date_parts = cells[0].split('/')
         day = date_parts[0]
         month = date_parts[1]
         year = date_parts[2]
